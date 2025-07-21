@@ -332,6 +332,9 @@ app.get("/topics", (req, res) => {
   res.json(topics);
 });
 
+app.get("/", (req, res) => {
+  res.send("WitLink backend is running!");
+});
 // main();
 
 server.listen(PORT, () => {
