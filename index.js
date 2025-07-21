@@ -335,8 +335,29 @@ app.get("/topics", (req, res) => {
 app.get("/", (req, res) => {
   res.send("WitLink backend is running!");
 });
+
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
 // main();
 
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
+
+// Self pinging for health check
+const SELF_URL = "https://witlink-be.onrender.com/health";
+const LOCAL_URL = "http://localhost:8000/health";
+setInterval(() => {
+  fetch(SELF_URL)
+    .then((res) => {
+      if (res.ok) {
+        console.log(`Self-ping at ${new Date()}`);
+      } else {
+        console.error(`Self-ping failed with status ${res.status}`);
+      }
+    })
+    .catch((err) => {
+      console.error(`Self-ping error:`, err.message);
+    });
+}, 13 * 60 * 1000);
