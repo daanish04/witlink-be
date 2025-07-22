@@ -10,6 +10,90 @@ dotenv.config();
 // The client gets the API key from the environment variable `GEMINI_API_KEY`.
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+// In-memory data stores- will add a database, or maybe in-memory questions object arrays
+const topics = [
+  "World Capitals",
+  "Famous Landmarks",
+  "Inventions and Inventors",
+  "Flags of the World",
+  "Nobel Prize Winners",
+  "Basic Mathematics",
+  "Human Body & Anatomy",
+  "Physics Fundamentals",
+  "Vocabulary & Grammar",
+  "Famous Books & Authors",
+  "Movie Trivia",
+  "TV Shows & Sitcoms",
+  "Celebrity Guessing",
+  "Oscars & Awards",
+  "Animated Films & Characters",
+  "Classic Video Games",
+  "Esports & Streamers",
+  "Game Soundtracks",
+  "Gaming Consoles",
+  "Game Logos & Characters",
+  "Music Genres",
+  "Guess the Song from Lyrics",
+  "Famous Musicians/Bands",
+  "Instruments Around the World",
+  "Grammy Winners",
+  "Countries by Shape",
+  "Mountains & Rivers",
+  "Natural Wonders",
+  "Time Zones & Continents",
+  "Bordering Countries",
+  "Ancient Civilizations",
+  "World Wars",
+  "Historical Leaders",
+  "Timeline Challenge",
+  "Famous Revolutions",
+  "Riddles",
+  "Pattern Recognition",
+  "Lateral Thinking",
+  "Math Puzzles",
+  "Which One Doesn’t Belong?",
+  "Periodic Table",
+  "Space & Astronomy",
+  "Animals & Habitats",
+  "Weather & Climate",
+  "Scientific Discoveries",
+  "Tech Founders",
+  "Internet Acronyms",
+  "Programming Languages",
+  "Famous Apps & Tools",
+  "Cybersecurity Basics",
+  "Olympic Games",
+  "Football World Cups",
+  "Tennis Grand Slams",
+  "NBA/NFL/Cricket Trivia",
+  "Famous Athletes",
+  "Indian Festivals",
+  "Indian History",
+  "Indian Cinema",
+  "Indian Cuisine",
+  "Indian Constitution & Politics",
+  "World Art Movements",
+  "Classical Paintings",
+  "Architecture Styles",
+  "World Mythologies",
+  "Dance & Theater",
+  "Famous Companies",
+  "Stock Market Basics",
+  "Cryptocurrency",
+  "Business Tycoons",
+  "Brand Logos",
+  "Memes & Internet Trends",
+  "Fashion & Style",
+  "Famous Quotes",
+  "Food & Drinks",
+  "Would You Rather? Style Trivia",
+];
+
+// Helper function to get a random topic from the topics array
+const getRandomTopic = () => {
+  return topics[Math.floor(Math.random() * topics.length)];
+};
+
 // Helper function to generate questions using Gemini
 async function generateQuestions(topic, difficulty) {
   const response = await ai.models.generateContent({
@@ -46,19 +130,7 @@ const io = new Server(server, {
   },
 });
 
-// In-memory data stores
-const topics = [
-  { name: "History of Artificial Intelligence" },
-  { name: "Basic Calculus" },
-  { name: "World Geography" },
-  { name: "Cooking Techniques" },
-  { name: "Modern Art" },
-  { name: "Quantum Physics" },
-  { name: "Classic Literature" },
-  { name: "Computer Programming" },
-];
-
-// roomId: { id, name, isPrivate, players: [ { id, name, score } ], status, hostId }
+// roomId: { id, name, isPrivate (future: to show available public rooms), players: [ { id, name, score } ], status [(WAITING, RUNNING)], hostId }
 const rooms = new Map();
 
 io.use((socket, next) => {
@@ -81,7 +153,8 @@ io.on("connection", (socket) => {
     const roomId = nanoid(6);
     rooms.set(roomId, {
       id: roomId,
-      topic: "",
+      // Set a random topic from helper function
+      topic: getRandomTopic(),
       difficulty: "EASY",
       maxPlayers: 5,
       players: [],
