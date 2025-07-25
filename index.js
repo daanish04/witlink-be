@@ -130,7 +130,7 @@ const io = new Server(server, {
   },
 });
 
-// roomId: { id, name, isPrivate (future: to show available public rooms), players: [ { id, name, score } ], status [(WAITING, RUNNING)], hostId }
+// roomId: { id, topic, isPrivate (future: to show available public rooms), players: [ { id, name, score, status (lobby, ingame) } ], status [(WAITING, RUNNING)], hostId }
 const rooms = new Map();
 
 io.use((socket, next) => {
@@ -164,7 +164,12 @@ io.on("connection", (socket) => {
     });
     socket.join(roomId);
     const room = rooms.get(roomId);
-    const player = { id: socket.id, name: socket.playerName, score: 0 };
+    const player = {
+      id: socket.id,
+      name: socket.playerName,
+      score: 0,
+      status: "LOBBY",
+    };
     room.players.push(player);
     console.log(`${socket.playerName} made and joined room: ${roomId}`);
 
@@ -185,7 +190,12 @@ io.on("connection", (socket) => {
       return;
     }
     socket.join(roomId);
-    const player = { id: socket.id, name: socket.playerName, score: 0 };
+    const player = {
+      id: socket.id,
+      name: socket.playerName,
+      score: 0,
+      status: "LOBBY",
+    };
     room.players.push(player);
     // inform other users in the room
     io.to(roomId).emit("player-joined", {
@@ -207,6 +217,7 @@ io.on("connection", (socket) => {
       id: player.id,
       name: player.name,
       score: player.score,
+      status: player.status,
     }));
     socket.emit("room-users", {
       roomId,
@@ -249,6 +260,9 @@ io.on("connection", (socket) => {
       const questions = await generateQuestions(room.topic, room.difficulty);
       room.questions = questions;
       room.status = "RUNNING";
+      room.players.forEach((player) => {
+        player.status = "INGAME";
+      });
       io.to(roomId).emit("game-started", room);
     } catch (error) {
       console.error("Error generating questions:", error);
@@ -275,6 +289,21 @@ io.on("connection", (socket) => {
     }
   });
 
+  // player finished game
+  socket.on("player-finished", (roomId) => {
+    if (!rooms.has(roomId)) {
+      socket.emit("room-error", "Room does not exist");
+      return;
+    }
+    const room = rooms.get(roomId);
+    if (room.status !== "RUNNING") {
+      socket.emit("room-error", "Game is not running");
+      return;
+    }
+    room.players.find((player) => player.id === socket.id).status = "LOBBY";
+    io.to(roomId).emit("player-finished", room);
+  });
+
   // game over and going back to the game page
   socket.on("game-over", (roomId) => {
     if (!rooms.has(roomId)) {
@@ -283,6 +312,9 @@ io.on("connection", (socket) => {
     }
     const room = rooms.get(roomId);
     room.status = "WAITING";
+    room.players.forEach((player) => {
+      player.status = "LOBBY";
+    });
     io.to(roomId).emit("back-to-room", room);
     for (const player of room.players) {
       player.score = 0;
