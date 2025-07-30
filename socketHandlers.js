@@ -198,9 +198,12 @@ export function registerSocketHandlers(
         return;
       }
       const room = rooms.get(roomid);
-      const playerName = room.players.find(
-        (player) => player.id === socket.id
-      ).name;
+      const player = room.players.find((player) => player.id === socket.id);
+      if (!player) {
+        socket.emit("room-error", "Player not found in room");
+        return;
+      }
+      const playerName = player.name;
       room.players = room.players.filter((player) => player.id !== socket.id);
       if (room.hostId === socket.id) {
         io.to(roomid).emit("room-closed", {
@@ -239,6 +242,7 @@ export function registerSocketHandlers(
           room.players = room.players.filter(
             (player) => player.id !== socket.id
           );
+          // If host leaves, close room
           if (room.hostId === socket.id) {
             io.to(roomId).emit("room-closed", {
               message: "Host has left. Room is closed.",
