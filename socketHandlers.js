@@ -125,6 +125,7 @@ export function registerSocketHandlers(
         return;
       }
       try {
+        io.to(roomId).emit("game-starting");
         const questions = await generateQuestions(room.topic, room.difficulty);
         room.questions = questions;
         room.status = "RUNNING";
