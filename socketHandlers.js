@@ -230,6 +230,26 @@ export function registerSocketHandlers(
       }
     });
 
+    socket.on("message", ({ roomId, message }) => {
+      if (!rooms.has(roomId)) {
+        socket.emit("room-error", "Room does not exist");
+        return;
+      }
+      const room = rooms.get(roomId);
+      const player = room.players.find((player) => player.id === socket.id);
+      if (!player) {
+        socket.emit("room-error", "Player not found in room");
+        return;
+      }
+      io.to(roomId).emit("message", {
+        player: {
+          id: player.id,
+          name: player.name,
+        },
+        message,
+      });
+    });
+
     socket.on("disconnect", () => {
       for (const [roomId, room] of rooms.entries()) {
         const wasInRoom = room.players.some(
