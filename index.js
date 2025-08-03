@@ -9,11 +9,16 @@ import { rooms } from "./rooms.js";
 import { registerSocketHandlers } from "./socketHandlers.js";
 import { registerRoutes } from "./routes.js";
 
+const allowedOrigins = [
+  "http://localhost:3000", // dev frontend
+  "https://wit-link.vercel.app/", // deployed frontend
+];
+
 const app = express();
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -24,7 +29,13 @@ const io = new Server(server, {
 });
 
 app.use(express.json());
-app.use(cors());
+app.use(
+  cors({
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
+    credentials: true,
+  })
+);
 
 registerSocketHandlers(io, rooms, getRandomTopic, generateQuestions);
 registerRoutes(app, topics, generateQuestions, rooms);
