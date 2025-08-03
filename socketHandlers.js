@@ -63,7 +63,7 @@ export function registerSocketHandlers(
         id: socket.id,
         name: socket.playerName,
         score: 0,
-        status: "LOBBY",
+        status: room.status === "RUNNING" ? "INGAME" : "LOBBY",
       };
       room.players.push(player);
       io.to(roomId).emit("player-joined", {
