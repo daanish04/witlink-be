@@ -45,16 +45,16 @@ server.listen(PORT, () => {
 });
 
 // Self pinging for health check
-setInterval(() => {
-  fetch(SELF_URL)
-    .then((res) => {
-      if (res.ok) {
-        console.log(`Self-ping at ${new Date()}`);
-      } else {
-        console.error(`Self-ping failed with status ${res.status}`);
-      }
-    })
-    .catch((err) => {
-      console.error(`Self-ping error:`, err.message);
-    });
-}, 13 * 60 * 1000);
+// setInterval(() => {
+//   fetch(SELF_URL)
+//     .then((res) => {
+//       if (res.ok) {
+//         console.log(`Self-ping at ${new Date()}`);
+//       } else {
+//         console.error(`Self-ping failed with status ${res.status}`);
+//       }
+//     })
+//     .catch((err) => {
+//       console.error(`Self-ping error:`, err.message);
+//     });
+// }, 14 * 60 * 1000);
