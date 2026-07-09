@@ -22,6 +22,12 @@ This is the backend for **WitLink**, a real-time multiplayer quiz platform. Buil
 - **Host Privileges**: Only hosts can start games and manage room settings
 - **Player States**: Track player status (LOBBY, INGAME, etc.)
 
+### 🔌 Connection Resilience
+
+- **Session-based Identity**: Players are identified by a persistent `sessionId`, so identity survives reconnections and tab refreshes
+- **30-second Grace Period**: When a player disconnects, the server waits 30 seconds before evicting them. If they reconnect in time, they are seamlessly reinstated with their score and host status intact
+- **Reconnection Support**: The `join-room` handler detects returning players by `sessionId`, cancels pending eviction timers, and restores their slot, reconnecting mid-game exactly where they left off.
+
 ### 🛠 Technical Features
 
 - **Socket.io Events**: Real-time communication for all game actions
@@ -101,7 +107,7 @@ server/
 ### Utilities
 
 - **[dotenv](https://www.npmjs.com/package/dotenv)** – Environment variable management
-- **[nanoid](https://www.npmjs.com/package/nanoid)** – Unique ID generation
+- **[nanoid](https://www.npmjs.com/package/nanoid)** – Unique room/session ID generation
 - **[cors](https://www.npmjs.com/package/cors)** – Cross-origin resource sharing
 
 ---
@@ -110,40 +116,64 @@ server/
 
 ### REST Endpoints
 
-- `GET /api/questions/:roomId` – Get questions for a specific room
-- `GET /api/question?topic=...&difficulty=...` – Generate questions (testing)
-- `GET /topics` – List available quiz topics
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/questions/:roomId` | Get cached questions for a room |
+| `GET` | `/api/question?topic=&difficulty=` | Generate questions ad-hoc (testing) |
+| `GET` | `/topics` | List all available quiz topics |
+
+### Socket.io Handshake Auth
+
+Every socket connection must supply auth credentials:
+
+```js
+// Client side
+io(url, {
+  auth: {
+    name: "PlayerName",   // Display name
+    sessionId: "abc123"   // Persistent ID from localStorage
+  }
+})
+```
+
+The server middleware validates both fields and rejects connections missing either.
 
 ### Socket.io Events
 
-#### Client to Server
+#### Client → Server
 
-- `make-room` – Create a new room
-- `join-room` – Join an existing room
-- `get-room-users` – Get room players and host
-- `room-update` – Update room settings (host only)
-- `start-game` – Start the quiz (host only)
-- `submit-answer` – Submit answer to current question
-- `player-finished` – Player completed the game
-- `game-over` – End game and return to lobby (host only)
-- `leave-room` – Leave the current room
-- `message` – Send chat message
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `make-room` | `{}`, callback `(roomId)` | Create a new room; receives `roomId` via ack |
+| `join-room` | `roomId` | Join or **reconnect** to an existing room |
+| `get-room-users` | `roomId` | Fetch current room state for the requesting player |
+| `room-update` | `{ id, topic, difficulty, maxPlayers }` | Update room settings (host only) |
+| `start-game` | `roomId` | Generate questions and start game (host only) |
+| `submit-answer` | `{ roomId, answer, correctAnswer, isCorrect }` | Submit answer; advances `questionIndex` regardless of correctness |
+| `player-finished` | `roomId` | Signal that the player has completed all questions |
+| `game-over` | `roomId` | Reset room to lobby (host only; blocked while players are still INGAME) |
+| `leave-room` | `roomId` | Intentionally leave (instant eviction, no grace period) |
+| `rename-player` | `newName`, callback `(err?)` | Rename the player across all rooms; ack returns error string on failure |
+| `message` | `{ roomId, message }` | Send chat message |
 
-#### Server to Client
+#### Server → Client
 
-- `room-joined` – Confirmation of room join
-- `room-users` – Room players and host information
-- `player-joined` – New player joined notification
-- `room-left` – Player left notification
-- `room-saved` – Room settings updated
-- `game-starting` – Game is about to start
-- `game-started` – Game has started
-- `answer-correct` – Answer validation result
-- `player-finished` – Player completed game
-- `back-to-room` – Return to lobby
-- `room-closed` – Room has been closed
-- `room-error` – Error notification
-- `message` – Chat message received
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `room-joined` | `room + reconnectQuestionIndex` | Full room state for the joining/reconnecting player |
+| `room-users` | `{ roomId, host, players }` | Room player list update |
+| `player-joined` | `{ roomId, player, players }` | A new player joined (also fired on reconnect to trigger redirect) |
+| `room-left` | `{ playerId, playerName, players }` | A player intentionally left |
+| `room-saved` | `room` | Room settings were updated |
+| `game-starting` | — | AI is generating questions |
+| `game-started` | `room` | Questions ready, game begins |
+| `answer-correct` | `room` | Emitted when a correct answer is submitted (score updated) |
+| `player-finished` | `room` | A player completed all questions |
+| `player-renamed` | `{ playerId, newName, players }` | A player was renamed |
+| `back-to-room` | `room` | Game over, returning to lobby |
+| `room-closed` | `{ message }` | Room was closed (host left or grace period expired) |
+| `room-error` | `errorString` | Operation failed |
+| `message` | `{ player, message }` | Chat message broadcast |
 
 ---
 
@@ -170,19 +200,29 @@ server/
 
 ## 🏗 Architecture
 
-### Room Management
+### Player Object Schema
 
-- **In-Memory Storage**: Rooms stored in Map for fast access
-- **Player Tracking**: Real-time player state management
-- **Host Control**: Host privileges and room ownership
-- **Auto-Cleanup**: Automatic room cleanup on host disconnect
+```js
+{
+  id: "sessionId",       // Persistent — survives reconnects
+  socketId: "socket.id", // Transient — changes on every connection
+  name: "PlayerName",
+  score: 0,
+  status: "LOBBY" | "INGAME",
+  isOnline: true,
+  questionIndex: 0,      // Server-tracked progress through questions
+  disconnectTimeout: ... // Internal only — never sent to clients
+}
+```
 
-### Socket.io Implementation
+### Reconnection Flow
 
-- **Authentication**: Player name-based authentication
-- **Room Joining**: Automatic room assignment and player tracking
-- **Event Handling**: Comprehensive event handling for all game actions
-- **Error Recovery**: Graceful error handling and recovery
+1. Player disconnects → marked `isOnline: false`, room is notified, 30s timer starts
+2. If player reconnects within 30s via `join-room`:
+   - Timer cancelled
+   - `socketId` updated, `isOnline` set back to `true`
+   - `room-joined` (with `reconnectQuestionIndex`), `room-users`, and `player-joined` emitted to sync state and trigger client redirect
+3. If timer expires → player evicted; if host, room is closed
 
 ---
 
@@ -198,6 +238,4 @@ server/
 
 ## 🔗 Related Projects
 
-- **[WitLink Frontend](https://github.com/yourusername/witLink-frontend)** – Next.js frontend with real-time multiplayer features
-
----
+- **[WitLink Frontend](https://github.com/daanish04/witlink-fe)** – Next.js frontend with real-time multiplayer features
