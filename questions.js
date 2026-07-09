@@ -2,7 +2,7 @@ import { ai } from "./config.js";
 
 export async function generateQuestions(topic, difficulty) {
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "	gemini-3-flash-preview",
     contents: `Generate 10 multiple-choice questions for a quiz.
     The topic is: ${topic}\nThe difficulty is: ${difficulty} (among the game choices of 'easy', 'medium', 'hard').
     Each question should have:
